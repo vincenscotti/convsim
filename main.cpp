@@ -1,52 +1,81 @@
 #include <iostream>
+#include <array>
+#include <functional>
+#include <memory>
+
 #include <systemc>
+
+#include "tests.h"
 
 using namespace std;
 using namespace sc_core;
 using namespace sc_dt;
 
-SC_MODULE(PE) {
-    sc_in<bool> clk;
-    sc_in<bool> rst;
+#include "eyeriss_v2.h"
 
-    SC_CTOR(PE) {
-        SC_METHOD(print);
-        sensitive << clk.pos();
-        dont_initialize();
+using namespace eyeriss::v2;
+
+void router_test(sc_clock &clk) {
+    typedef router<uint32_t> trouter;
+
+    // route setup
+    trouter::config c;
+    c.groupEnable(GLB, {PE});
+
+    // 1-slot IO fifos
+    typedef sc_fifo<trouter::data_type> dfifo;
+    array<dfifo, N_DIRECTIONS> inputs{dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1)};
+    array<dfifo, N_DIRECTIONS> outputs{dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1)};
+
+    // router initialization
+    trouter r("r");
+    r.set_config(c);
+    r.clk(clk);
+
+    for (size_t i = 0; i < N_DIRECTIONS; i++) {
+        r.in[i](inputs[i]);
+        r.out[i](outputs[i]);
     }
 
-    void print() {
-        if (!rst) {
-            cout << "clock edge at " << sc_time_stamp().to_string() << "!" << endl;
-        }
-    }
-};
+    sc_start(clk.period());
+
+    inputs[GLB].write(100);
+
+    sc_start(3 * clk.period());
+
+    // it should leave from the PE port
+    assert(outputs[N].num_free() == 1);
+    assert(outputs[E].num_free() == 1);
+    assert(outputs[S].num_free() == 1);
+    assert(outputs[W].num_free() == 1);
+    assert(outputs[GLB].num_free() == 1);
+    assert(outputs[PE].num_free() == 0);
+
+    uint32_t readback;
+    outputs[PE].read(readback);
+    assert(readback == 100);
+}
+
+typedef uint8_t weight_t;
+typedef uint8_t iact_t;
+typedef uint8_t psum_t;
+
+typedef router<weight_t> wrouter;
+typedef router_cluster<weight_t, iact_t, psum_t, 3, 4> cluster;
 
 int sc_main (int, char *[]) {
-    constexpr double clk_period = 10;
-
-    sc_set_time_resolution(1, SC_NS);
-
-    PE pe("p");
+    const double clk_period = 10;
     sc_clock clk("clk", clk_period, SC_NS);
-    sc_signal<bool> rst;
 
-    pe.clk(clk);
-    pe.rst(rst);
+    //pe_cluster_tb pe_tb("pe_tb");
+    //pe_tb.clk(clk);
 
-    rst = true;
+    pe_cluster_conv1 pe_conv1("pe_conv1");
+    pe_conv1.clk(clk);
 
-    auto trace_file = sc_create_vcd_trace_file("dump");
-    sc_trace(trace_file, pe.clk, "pe.clk");
-    sc_trace(trace_file, pe.rst, "pe.rst");
+    //router_test(clk);
 
-    sc_start((2 * clk_period) + (clk_period / 2), SC_NS);
-
-    rst = false;
-
-    sc_start(10 * clk_period, SC_NS);
-
-    sc_close_vcd_trace_file(trace_file);
+    sc_start(1000 * clk.period());
 
     return 0;
 }

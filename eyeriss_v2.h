@@ -4,8 +4,9 @@
 
 #include <memory>
 #include <functional>
+#include <list>
 
-#define MOD_DBG(x) cerr << "module " << name() << ": " << x << endl;
+#define MOD_DBG(x) cerr << "module " << name() << " @ " << sc_time_stamp() << ": " << x << endl;
 //#define MOD_DBG(x)
 
 using namespace std;
@@ -196,6 +197,10 @@ private:
     config cfg;
     // pipe stage1 to stage2 fifo
     sc_fifo<IAct_t> fifo_1to2;
+    // sliding window - max KW-1 elements
+    list<IAct_t> iact_win;
+    // weight storage
+    vector<W_t> weight_row;
     // pipe stage2 to stage3 fifo
     sc_fifo<IAct_t> fifo_2to3_act;
     sc_fifo<W_t> fifo_2to3_w;
@@ -222,28 +227,71 @@ public:
 
 private:
     void stage1() {
-        while (true) {
+        //while (true) {
+        //    IAct_t iact;
+
+        //    iact_in.read(iact);
+        //    wait(1);
+        //    fifo_1to2.write(iact);
+        //    MOD_DBG("stage 1: propagate iact");
+        //}
+
+        // first sliding window generation
+        for (size_t i = 0; i < cfg.kernel_w; i++) {
             IAct_t iact;
 
             iact_in.read(iact);
             wait(1);
             fifo_1to2.write(iact);
+            if (i > 0) iact_win.push_back(iact);
             MOD_DBG("stage 1: propagate iact");
+        }
+
+        while (true) {
+            // we send first KW-1 window elements (which we already saved)
+            for (auto iact : iact_win) {
+                wait(1);
+                fifo_1to2.write(iact);
+                MOD_DBG("stage 1: propagate iact");
+            }
+
+            // then the last one
+            {
+                IAct_t iact;
+
+                iact_in.read(iact);
+                wait(1);
+                fifo_1to2.write(iact);
+                iact_win.pop_front();
+                iact_win.push_back(iact);
+                MOD_DBG("stage 1: propagate iact");
+            }
         }
     }
 
     void stage2() {
+        size_t next_weight_ptr = 0;
+
         while (true) {
             IAct_t iact;
             W_t w;
 
             fifo_1to2.read(iact);
-            weight_in.read(w);
+
+            if (weight_row.size() < next_weight_ptr + 1) {
+                weight_in.read(w);
+                weight_row.push_back(w);
+            }
+
+            w = weight_row[next_weight_ptr];
+
             wait(1);
             fifo_2to3_act.write(iact);
             MOD_DBG("stage 2: propagate iact");
             fifo_2to3_w.write(w);
-            MOD_DBG("stage 2: propagate weight");
+            MOD_DBG("stage 2: propagate weight column " << next_weight_ptr);
+
+            next_weight_ptr = (next_weight_ptr + 1) % cfg.kernel_w;
         }
     }
 
@@ -252,6 +300,8 @@ private:
         PSum_t remote_psum = 0;
 
         while (true) {
+            local_psum = 0;
+
             for (size_t i = 0; i < cfg.kernel_w; i++) {
                 IAct_t iact;
                 W_t w;
@@ -271,7 +321,6 @@ private:
 
                     psum_out.write(local_psum);
                     MOD_DBG("stage 3: propagate psum");
-                    local_psum = 0;
                 }
             }
         }

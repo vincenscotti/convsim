@@ -113,9 +113,9 @@ void pe_cluster_conv1::main() {
     iact[1].write(5);
     iact[1].write(6);
     // third iact row
-    iact[3].write(7);
-    iact[3].write(8);
-    iact[3].write(9);
+    iact[2].write(7);
+    iact[2].write(8);
+    iact[2].write(9);
 
     for (size_t o_r = 0; o_r < ofmap_r; o_r++) {
         for (size_t o_c = 0; o_c < ofmap_c; o_c++) {

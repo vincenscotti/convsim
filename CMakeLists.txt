@@ -6,7 +6,13 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 project(convsim)
 
-set(SYSTEMC_HOME "/home/vscotti/Apps/systemc-2.3.3/")
+if(NOT DEFINED SYSTEMC_HOME)
+    if(DEFINED ENV{SYSTEMC_HOME})
+        set(SYSTEMC_HOME ENV{SYSTEMC_HOME})
+    else()
+        message(FATAL_ERROR "You need to set the SYSTEMC_HOME environment variable!")
+    endif()
+endif()
 
 include_directories(${SYSTEMC_HOME}/include)
 link_directories(${SYSTEMC_HOME}/lib-linux64)

@@ -31,16 +31,16 @@ SC_MODULE(pe_cluster_conv1) {
     SC_CTOR(pe_cluster_conv1);
 
 private:
-    static constexpr size_t rows = 2;
-    static constexpr size_t cols = 2;
-    static constexpr size_t banks = 3;
-
     static constexpr size_t ifmap_r = 3;
     static constexpr size_t ifmap_c = 3;
     static constexpr size_t kernel_r = 2;
     static constexpr size_t kernel_c = 2;
     static constexpr size_t ofmap_r = 2;
     static constexpr size_t ofmap_c = 2;
+
+    static constexpr size_t rows = kernel_r;
+    static constexpr size_t cols = ofmap_r;
+    static constexpr size_t banks = rows + cols - 1;
 
     typedef sc_fifo<uint32_t> fifo;
     typedef eyeriss::v2::pe_cluster<uint32_t, uint32_t, uint32_t, rows, cols, banks> cluster;

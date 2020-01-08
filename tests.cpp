@@ -2,7 +2,85 @@
 
 using namespace eyeriss::v2;
 
-pe_cluster_tb::pe_cluster_tb(sc_core::sc_module_name) : c("c") {
+testbench::testbench(sc_module_name name) : testbench(name, false, false) {
+}
+
+testbench::testbench(sc_module_name name, bool first, bool last) {
+    wait_start = !first;
+    trigger_stop = last;
+
+    SC_THREAD(run_thread);
+    sensitive << clk.pos();
+}
+
+void testbench::run_thread() {
+    if (wait_start) wait(*start);
+
+    sc_time start_time = sc_time_stamp();
+    bool success = run();
+    sc_time end_time = sc_time_stamp();
+
+    if (success) {
+        cerr << "Testbench " << name() << " PASSED in " << end_time - start_time << endl << endl;
+    } else {
+        cerr << "Testbench " << name() << " FAILED!!!" << endl;
+    }
+
+    if (trigger_stop) sc_stop();
+    else end.notify();
+}
+
+router_tb::router_tb(sc_core::sc_module_name name) : router_tb(name, false, false) {
+
+}
+
+router_tb::router_tb(sc_core::sc_module_name name, bool first, bool last) : testbench(name, first, last), r("r"),
+                                            inputs{dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1)},
+                                            outputs{dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1)}
+{
+    // route setup
+    trouter::config c;
+    c.groupEnable(GLB, {PE});
+
+    r.set_config(c);
+    r.clk(clk);
+
+    for (size_t i = 0; i < N_DIRECTIONS; i++) {
+        r.in[i](inputs[i]);
+        r.out[i](outputs[i]);
+    }
+}
+
+bool router_tb::run() {
+
+    inputs[GLB].write(100);
+
+    constexpr int cycles = 10;
+    for (int i = 0; i < 2 * cycles; i++) {
+        wait(clk.value_changed_event());
+    }
+
+    // it should leave from the PE port
+    assert(outputs[N].num_free() == 1);
+    assert(outputs[E].num_free() == 1);
+    assert(outputs[S].num_free() == 1);
+    assert(outputs[W].num_free() == 1);
+    assert(outputs[GLB].num_free() == 1);
+    assert(outputs[PE].num_free() == 0);
+
+    uint32_t readback;
+    outputs[PE].read(readback);
+    assert(readback == 100);
+
+    return true;
+
+}
+
+pe_cluster_tb::pe_cluster_tb(sc_core::sc_module_name name) : pe_cluster_tb(name, false, false) {
+
+}
+
+pe_cluster_tb::pe_cluster_tb(sc_core::sc_module_name name, bool first, bool last) : testbench(name, first, last), c("c") {
 
     c.clk(clk);
 
@@ -19,12 +97,9 @@ pe_cluster_tb::pe_cluster_tb(sc_core::sc_module_name) : c("c") {
 
     c.set_config(cfg);
 
-    SC_THREAD(main);
-    sensitive << clk.pos();
-
 }
 
-void pe_cluster_tb::main() {
+bool pe_cluster_tb::run() {
     wait(1);
 
     iact[0].write(10);
@@ -33,12 +108,15 @@ void pe_cluster_tb::main() {
     uint32_t r1 = psum_out[0].read();
 
     assert(r1 == 100);
-    cerr << "pe_cluster_tb PASSED" << endl;
 
-    //sc_stop();
+    return true;
 }
 
-pe_cluster_conv1::pe_cluster_conv1(sc_core::sc_module_name) : c("c") {
+pe_cluster_conv1::pe_cluster_conv1(sc_core::sc_module_name name) : pe_cluster_conv1(name, false, false) {
+
+}
+
+pe_cluster_conv1::pe_cluster_conv1(sc_core::sc_module_name name, bool first, bool last) : testbench(name, first, last), c("c") {
 
     c.clk(clk);
 
@@ -61,12 +139,9 @@ pe_cluster_conv1::pe_cluster_conv1(sc_core::sc_module_name) : c("c") {
 
     c.set_config(cfg);
 
-    SC_THREAD(main);
-    sensitive << clk.pos();
-
 }
 
-void pe_cluster_conv1::main() {
+bool pe_cluster_conv1::run() {
     wait(1);
 
     array<array<uint32_t, ifmap_c>, ifmap_r> ifmap;
@@ -125,7 +200,5 @@ void pe_cluster_conv1::main() {
         }
     }
 
-    cerr << "pe_cluster_conv1 PASSED" << endl;
-
-    //sc_stop();
+    return true;
 }

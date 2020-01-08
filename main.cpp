@@ -15,47 +15,6 @@ using namespace sc_dt;
 
 using namespace eyeriss::v2;
 
-void router_test(sc_clock &clk) {
-    typedef router<uint32_t> trouter;
-
-    // route setup
-    trouter::config c;
-    c.groupEnable(GLB, {PE});
-
-    // 1-slot IO fifos
-    typedef sc_fifo<trouter::data_type> dfifo;
-    array<dfifo, N_DIRECTIONS> inputs{dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1)};
-    array<dfifo, N_DIRECTIONS> outputs{dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1), dfifo(1)};
-
-    // router initialization
-    trouter r("r");
-    r.set_config(c);
-    r.clk(clk);
-
-    for (size_t i = 0; i < N_DIRECTIONS; i++) {
-        r.in[i](inputs[i]);
-        r.out[i](outputs[i]);
-    }
-
-    sc_start(clk.period());
-
-    inputs[GLB].write(100);
-
-    sc_start(3 * clk.period());
-
-    // it should leave from the PE port
-    assert(outputs[N].num_free() == 1);
-    assert(outputs[E].num_free() == 1);
-    assert(outputs[S].num_free() == 1);
-    assert(outputs[W].num_free() == 1);
-    assert(outputs[GLB].num_free() == 1);
-    assert(outputs[PE].num_free() == 0);
-
-    uint32_t readback;
-    outputs[PE].read(readback);
-    assert(readback == 100);
-}
-
 typedef uint8_t weight_t;
 typedef uint8_t iact_t;
 typedef uint8_t psum_t;
@@ -67,15 +26,19 @@ int sc_main (int, char *[]) {
     const double clk_period = 10;
     sc_clock clk("clk", clk_period, SC_NS);
 
-    //pe_cluster_tb pe_tb("pe_tb");
-    //pe_tb.clk(clk);
+    router_tb r_tb("r_tb", true, false);
+    r_tb.clk(clk);
 
-    pe_cluster_conv1 pe_conv1("pe_conv1");
+    pe_cluster_tb pe_tb("pe_tb", false, false);
+    pe_tb.clk(clk);
+
+    pe_cluster_conv1 pe_conv1("pe_conv1", false, true);
     pe_conv1.clk(clk);
 
-    //router_test(clk);
+    pe_tb.start = &r_tb.end;
+    pe_conv1.start = &pe_tb.end;
 
-    sc_start(1000 * clk.period());
+    sc_start();
 
     return 0;
 }

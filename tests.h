@@ -22,6 +22,9 @@ SC_MODULE(testbench) {
 
     virtual bool run() = 0;
 
+protected:
+    void aux_thread_wait();
+
 private:
     void run_thread();
 
@@ -86,11 +89,22 @@ private:
     typedef sc_fifo<uint32_t> fifo;
     typedef convsim::row_stationary::pe_cluster<uint32_t, uint32_t, uint32_t, rows, cols, banks> cluster;
 
+    void weight_write_thread(int bank);
+    void iact_write_thread(int bank);
+    void psum_read_thread(int bank);
+    void inject(fifo *f, vector<uint32_t> data);
+
+    sc_event_queue read_done;
+
+    array<array<uint32_t, ifmap_c>, ifmap_r> ifmap;
+    array<array<uint32_t, kernel_c>, kernel_r> kernel;
+    array<array<uint32_t, ofmap_c>, ofmap_r> ofmap;
+
     cluster c;
-    array<fifo, banks> iact;
-    array<fifo, rows> weight;
-    array<fifo, cols> psum_in;
-    array<fifo, cols> psum_out;
+    array<fifo, banks> iact_fifo;
+    array<fifo, rows> weight_fifo;
+    array<fifo, cols> psum_in_fifo;
+    array<fifo, cols> psum_out_fifo;
 };
 
 }

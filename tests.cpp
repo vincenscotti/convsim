@@ -32,6 +32,10 @@ void testbench::run_thread() {
     else end.notify();
 }
 
+void testbench::aux_thread_wait() {
+    if (wait_start) wait(*start);
+}
+
 router_tb::router_tb(sc_core::sc_module_name name) : router_tb(name, false, false) {
 
 }
@@ -122,10 +126,10 @@ pe_cluster_conv1::pe_cluster_conv1(sc_core::sc_module_name name, bool first, boo
 
     c.clk(clk);
 
-    for (size_t i = 0; i < banks; i++) c.iact_in[i](iact[i]);
-    for (size_t i = 0; i < rows; i++) c.weight_in[i](weight[i]);
-    for (size_t i = 0; i < cols; i++) c.psum_in[i](psum_in[i]);
-    for (size_t i = 0; i < cols; i++) c.psum_out[i](psum_out[i]);
+    for (size_t i = 0; i < banks; i++) c.iact_in[i](iact_fifo[i]);
+    for (size_t i = 0; i < rows; i++) c.weight_in[i](weight_fifo[i]);
+    for (size_t i = 0; i < cols; i++) c.psum_in[i](psum_in_fifo[i]);
+    for (size_t i = 0; i < cols; i++) c.psum_out[i](psum_out_fifo[i]);
 
     cluster::config cfg;
 
@@ -140,15 +144,6 @@ pe_cluster_conv1::pe_cluster_conv1(sc_core::sc_module_name name, bool first, boo
     cfg.pe_config.kernel_h = kernel_r;
 
     c.set_config(cfg);
-
-}
-
-bool pe_cluster_conv1::run() {
-    wait(1);
-
-    array<array<uint32_t, ifmap_c>, ifmap_r> ifmap;
-    array<array<uint32_t, kernel_c>, kernel_r> kernel;
-    array<array<uint32_t, ofmap_c>, ofmap_r> ofmap;
 
     // precompute 2d conv
     for (size_t i_r = 0; i_r < ifmap_r; i_r++) {
@@ -175,31 +170,71 @@ bool pe_cluster_conv1::run() {
         }
     }
 
-    // first weight row
-    weight[0].write(1);
-    weight[0].write(2);
-    // second weight row
-    weight[1].write(3);
-    weight[1].write(4);
-    // first iact row
-    iact[0].write(1);
-    iact[0].write(2);
-    iact[0].write(3);
-    // second iact row
-    iact[1].write(4);
-    iact[1].write(5);
-    iact[1].write(6);
-    // third iact row
-    iact[2].write(7);
-    iact[2].write(8);
-    iact[2].write(9);
+    // weight injection per bank
+    for (size_t i = 0; i < weight_fifo.size(); ++i) {
+        sc_spawn_options opts;
+        opts.set_sensitivity(&clk.pos());
 
-    for (size_t o_r = 0; o_r < ofmap_r; o_r++) {
-        for (size_t o_c = 0; o_c < ofmap_c; o_c++) {
-            // we read the row elem by elem (so column-wise)
-            uint32_t val = psum_out[o_r].read();
-            assert(val == ofmap[o_r][o_c]);
-        }
+        sc_spawn(bind(&pe_cluster_conv1::weight_write_thread, this, i), 0, &opts);
+    }
+
+    // iact injection per bank
+    for (size_t i = 0; i < iact_fifo.size(); ++i) {
+        sc_spawn_options opts;
+        opts.set_sensitivity(&clk.pos());
+
+        sc_spawn(bind(&pe_cluster_conv1::iact_write_thread, this, i), 0, &opts);
+    }
+
+    // psum ejection per bank
+    for (size_t i = 0; i < psum_out_fifo.size(); ++i) {
+        sc_spawn_options opts;
+        opts.set_sensitivity(&clk.pos());
+
+        sc_spawn(bind(&pe_cluster_conv1::psum_read_thread, this, i), 0, &opts);
+    }
+
+}
+
+void pe_cluster_conv1::weight_write_thread(int bank) {
+
+    aux_thread_wait();
+
+    for (size_t i = 0; i < kernel_c; i++) {
+        weight_fifo[bank].write(bank * kernel_c + i + 1);
+    }
+
+}
+
+void pe_cluster_conv1::iact_write_thread(int bank) {
+
+    aux_thread_wait();
+
+    for (size_t i = 0; i < ifmap_c; i++) {
+        iact_fifo[bank].write(bank * ifmap_c + i + 1);
+    }
+
+}
+
+void pe_cluster_conv1::psum_read_thread(int bank) {
+
+    aux_thread_wait();
+
+    for (size_t o_c = 0; o_c < ofmap_c; o_c++) {
+        // we read the row elem by elem (so column-wise)
+        uint32_t val = psum_out_fifo[bank].read();
+        assert(val == ofmap[bank][o_c]);
+    }
+
+    read_done.notify(SC_ZERO_TIME);
+
+}
+
+bool pe_cluster_conv1::run() {
+    wait(1);
+
+    for (size_t i = 0; i < cols; ++i) {
+        wait(read_done.default_event());
     }
 
     return true;

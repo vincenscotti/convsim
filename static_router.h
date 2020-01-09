@@ -76,14 +76,14 @@ SC_MODULE(router) {
 
     SC_CTOR(router) : clk("clk") {
         // each source port has its own control flow (so a stall on one port doesn't stall the whole router)
-#define LAUNCH_SRC_PORT_THREAD(DIR) SC_THREAD(forward_##DIR); sensitive << clk.pos();
+        for (size_t i = 0; i < N_DIRECTIONS; i++) {
+            sc_spawn_options opts;
+            opts.set_sensitivity(&clk.pos());
 
-        LAUNCH_SRC_PORT_THREAD(N);
-        LAUNCH_SRC_PORT_THREAD(E);
-        LAUNCH_SRC_PORT_THREAD(S);
-        LAUNCH_SRC_PORT_THREAD(W);
-        LAUNCH_SRC_PORT_THREAD(GLB);
-        LAUNCH_SRC_PORT_THREAD(PE);
+            direction dir = static_cast<direction>(i);
+
+            sc_spawn(bind(&router::port_thread, this, dir), 0, &opts);
+        }
     }
 
     void set_config(config new_cfg) {
@@ -101,15 +101,7 @@ private:
     // the route configuration
     config cfg;
 
-#define DEFINE_SRC_PORT_FN(DIR) void forward_##DIR() { forward(DIR); }
-    DEFINE_SRC_PORT_FN(N);
-    DEFINE_SRC_PORT_FN(E);
-    DEFINE_SRC_PORT_FN(S);
-    DEFINE_SRC_PORT_FN(W);
-    DEFINE_SRC_PORT_FN(GLB);
-    DEFINE_SRC_PORT_FN(PE);
-
-    void forward(direction src) {
+    void port_thread(direction src) {
         DataType data_in;
 
         while (true) {

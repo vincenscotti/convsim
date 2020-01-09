@@ -5,15 +5,16 @@
 
 #include <systemc>
 
+#include "row_stationary.h"
 #include "tests.h"
 
 using namespace std;
 using namespace sc_core;
 using namespace sc_dt;
 
-#include "eyeriss_v2.h"
-
-using namespace eyeriss::v2;
+using namespace convsim;
+using namespace convsim::row_stationary;
+using namespace convsim::tests;
 
 typedef uint8_t weight_t;
 typedef uint8_t iact_t;

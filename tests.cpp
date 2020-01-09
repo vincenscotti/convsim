@@ -1,6 +1,8 @@
 #include "tests.h"
 
-using namespace eyeriss::v2;
+using namespace convsim;
+using namespace convsim::row_stationary;
+using namespace convsim::tests;
 
 testbench::testbench(sc_module_name name) : testbench(name, false, false) {
 }

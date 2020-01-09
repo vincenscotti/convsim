@@ -1,7 +1,15 @@
 #pragma once
 
 #include <systemc>
-#include "eyeriss_v2.h"
+#include <array>
+
+#include "row_stationary.h"
+
+namespace convsim {
+namespace tests {
+
+using namespace std;
+using namespace sc_core;
 
 SC_MODULE(testbench) {
     sc_in<bool> clk;
@@ -28,12 +36,12 @@ struct router_tb : testbench {
     virtual bool run() override;
 
 private:
-    typedef eyeriss::v2::router<uint32_t> trouter;
+    typedef convsim::router<uint32_t> trouter;
     typedef sc_fifo<trouter::data_type> dfifo;
 
     trouter r;
-    array<dfifo, eyeriss::v2::N_DIRECTIONS> inputs;
-    array<dfifo, eyeriss::v2::N_DIRECTIONS> outputs;
+    array<dfifo, convsim::N_DIRECTIONS> inputs;
+    array<dfifo, convsim::N_DIRECTIONS> outputs;
 };
 
 struct pe_cluster_tb : testbench {
@@ -48,7 +56,7 @@ private:
     static constexpr size_t banks = 3;
 
     typedef sc_fifo<uint32_t> fifo;
-    typedef eyeriss::v2::pe_cluster<uint32_t, uint32_t, uint32_t, rows, cols, banks> cluster;
+    typedef convsim::row_stationary::pe_cluster<uint32_t, uint32_t, uint32_t, rows, cols, banks> cluster;
 
     cluster c;
     array<fifo, rows> iact;
@@ -76,7 +84,7 @@ private:
     static constexpr size_t banks = rows + cols - 1;
 
     typedef sc_fifo<uint32_t> fifo;
-    typedef eyeriss::v2::pe_cluster<uint32_t, uint32_t, uint32_t, rows, cols, banks> cluster;
+    typedef convsim::row_stationary::pe_cluster<uint32_t, uint32_t, uint32_t, rows, cols, banks> cluster;
 
     cluster c;
     array<fifo, banks> iact;
@@ -84,3 +92,6 @@ private:
     array<fifo, cols> psum_in;
     array<fifo, cols> psum_out;
 };
+
+}
+}
